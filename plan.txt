@@ -1,0 +1,34 @@
+sand-ctl/
+├── cmd/
+│   └── sandctl/
+│       └── main.go          // CUMA 20-30 BARIS, cuma init config + ui.App.Run()
+│
+├── internal/
+│   ├── monitor/             // TUGAS: NGUMPULIN DATA DOANG, gak ngerender
+│   │   ├── cpu.go           // -> ambil cpu percent pake gopsutil
+│   │   ├── mem.go           // -> ram, swap
+│   │   ├── gpu.go           // -> baca /sys/class/drm/... ATAU gonvml, JANGAN exec nvidia-smi
+│   │   └── process.go       // -> list proses
+│   │
+│   ├── control/             // TUGAS: NGATUR SISTEM, dipanggil dari UI
+│   │   ├── brightness.go    // -> baca tulis /sys/class/backlight/*/brightness
+│   │   ├── volume.go        // -> wpctl / amixer wrapper
+│   │   └── wifi.go          // -> nmcli wrapper (opsional)
+│   │
+│   ├── ui/                  // TUGAS: RENDER DOANG, jangan ambil data di sini
+│   │   ├── app.go           // -> bubbletea Model utama, handle tab switching
+│   │   ├── styles.go        // -> SEMUA lipgloss style dibikin DISINI sekali, jadi global var
+│   │   ├── tabs.go          // -> logic pindah Monitoring <-> Control
+│   │   └── components/
+│   │       ├── graph.go     // -> widget grafik ala btop
+│   │       └── slider.go    // -> widget slider buat brightness/volume
+│   │
+│   ├── system/              // TUGAS: HELPER LOW-LEVEL
+│   │   ├── sysfs.go         // -> func ReadSysfs(path) string, WriteSysfs(path, val)
+│   │   └── exec.go          // -> wrapper exec.Command yang aman + timeout
+│   │
+│   └── config/
+│       └── config.go        // -> baca config file, interval, tema
+│
+├── go.mod
+└── go.sum

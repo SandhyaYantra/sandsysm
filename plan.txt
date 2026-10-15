@@ -1,34 +1,86 @@
-sand-ctl/
+
+sandsysm/
 ├── cmd/
-│   └── sandctl/
-│       └── main.go          // CUMA 20-30 BARIS, cuma init config + ui.App.Run()
-│
+│ └── sandsysm/
+│ └── main.go // MAX 30 LINES: only config.Load() + ui.NewApp().Run()
 ├── internal/
-│   ├── monitor/             // TUGAS: NGUMPULIN DATA DOANG, gak ngerender
-│   │   ├── cpu.go           // -> ambil cpu percent pake gopsutil
-│   │   ├── mem.go           // -> ram, swap
-│   │   ├── gpu.go           // -> baca /sys/class/drm/... ATAU gonvml, JANGAN exec nvidia-smi
-│   │   └── process.go       // -> list proses
-│   │
-│   ├── control/             // TUGAS: NGATUR SISTEM, dipanggil dari UI
-│   │   ├── brightness.go    // -> baca tulis /sys/class/backlight/*/brightness
-│   │   ├── volume.go        // -> wpctl / amixer wrapper
-│   │   └── wifi.go          // -> nmcli wrapper (opsional)
-│   │
-│   ├── ui/                  // TUGAS: RENDER DOANG, jangan ambil data di sini
-│   │   ├── app.go           // -> bubbletea Model utama, handle tab switching
-│   │   ├── styles.go        // -> SEMUA lipgloss style dibikin DISINI sekali, jadi global var
-│   │   ├── tabs.go          // -> logic pindah Monitoring <-> Control
-│   │   └── components/
-│   │       ├── graph.go     // -> widget grafik ala btop
-│   │       └── slider.go    // -> widget slider buat brightness/volume
-│   │
-│   ├── system/              // TUGAS: HELPER LOW-LEVEL
-│   │   ├── sysfs.go         // -> func ReadSysfs(path) string, WriteSysfs(path, val)
-│   │   └── exec.go          // -> wrapper exec.Command yang aman + timeout
-│   │
-│   └── config/
-│       └── config.go        // -> baca config file, interval, tema
-│
+│ ├── monitor/ // READ-ONLY, runs in goroutines, sends via channel every 1000ms
+│ │ ├── ram.go // From /proc/meminfo. Must expose: Free, Used, Cache, Available, Total in MB/GB, accurate. NOT just gopsutil, parse MemAvailable, Buffers, Cached manually.
+│ │ ├── disk.go // For each mountpoint: disk.Usage() -> Used, Free, Total in GB + Percent. Format function: FormatGB(bytes) -> "40.5 GB". Example string: "40.5 GB / 100 GB (40%)"
+│ │ ├── net.go // Realtime speed. Read /sys/class/net/<iface>/statistics/rx_bytes and tx_bytes. Speed = (now-prev)/1s. Convert to MB/s. Track total RX/TX, interface name, IP address (from net.Interfaces), ascii history [60 points]
+│ │ ├── media.go // Listener only, no control. Get now playing via MPRIS later
+│ │ └── process.go
+│ ├── control/
+│ │ ├── mount/
+│ │ │ ├── udisks.go // Mount/Unmount USB flashdrive, SDCard. MUST use dbus: org.freedesktop.UDisks2.Filesystem.Mount() and Unmount(). Use org.freedesktop.UDisks2.Block for listing drives. NO sudo mount, NO exec udisksctl in loop.
+│ │ │ └── mtp.go // Mount phone via USB MTP. Use jmtpfs or gvfs-mtp. List MTP devices. This is hard, create interface first.
+│ │ ├── wifi/
+│ │ │ ├── scanner.go // Full scan like nmcli dev wifi. MUST use org.freedesktop.NetworkManager.Device.Wireless.Scan() + GetAccessPoints(). Show: SSID, Signal%, Security, Frequency, Channel, BSSID. Don't exec nmcli every second, cache 5s.
+│ │ │ └── manager.go // Connect(ssid, password), Reconnect, Forget, Show secret (Get PSK). Use org.freedesktop.NetworkManager
+│ │ ├── bluetooth/
+│ │ │ ├── scanner.go // Scan via org.bluez.Adapter1.StartDiscovery(), list devices with RSSI, name, paired
+│ │ │ └── pair.go // Pair(), Trust(), Connect(), auto-pairing logic
+│ │ ├── audio/
+│ │ │ ├── output.go // List sinks, set-default-sink, volume mute via PipeWire/PulseAudio: org.freedesktop.DBus or pactl/wpctl wrapper but NOT every second. Cache.
+│ │ │ ├── input.go // CRITICAL FEATURE: When earphone plugged, user can choose mic source: built-in laptop mic vs external earphone mic. List sources via pactl list sources, then pactl set-default-source <name>. Must expose 2 sources.
+│ │ │ └── mic.go // Mic mute: pactl set-source-mute @DEFAULT_SOURCE@ toggle
+│ │ └── media/
+│ │ └── mpris.go // Control via org.mpris.MediaPlayer2.Player: PlayPause, Next, Previous, Get Metadata (title, artist, album). Show what is playing.
+│ ├── ui/
+│ │ ├── app.go // Main bubbletea Model. Tabs: 1=Monitor(RAM+Graph), 2=Disk & Mount, 3=Net & Wifi, 4=Audio & BT & Media. Navigation: h/l or Tab/Shift+Tab or 1-4 to switch tabs, j/k up/down, Enter to select/mount/connect, m to mute, q to quit.
+│ │ ├── styles.go // ALL styles defined ONCE as global vars: var StyleBar = lipgloss.NewStyle().Foreground(...). NEVER create style inside Render().
+│ │ ├── tabs.go // Tab rendering logic
+│ │ └── components/
+│ │ ├── bar.go // Func RenderBar(used, total, percent) -> "[████░░░░] 40.5 GB / 100 GB (40%)" with colors
+│ │ ├── graph.go // Func RenderGraph(history []float64) -> colorful ascii sparkline for MB/s, RAM usage
+│ │ └── list.go // Reusable selectable list for wifi, bluetooth, disks
+│ ├── system/
+│ │ ├── dbus.go // func GetDBusConn() *dbus.Conn - single shared connection for all modules, reuse
+│ │ ├── sysfs.go // func ReadSysfs(path string) (string, error), WriteSysfs
+│ │ └── proc.go // func ReadProcNetDev() map[string]{rx,tx}, ReadMemInfo()
+│ └── config/
+│ └── config.go // Load interval, theme, default iface
 ├── go.mod
-└── go.sum
+├── go.sum
+└── PKGBUILD (later)
+
+PERFORMANCE RULES - THIS FIXES GPU SPIKE, MANDATORY:
+1. Interval = 1000ms (1 second) everywhere. Use tea.Tick(time.Second) or time.NewTicker(time.Second). NO 100ms ticker.
+2. Styles: ALL lipgloss.NewStyle() must be in internal/ui/styles.go as global vars. In View() only USE the var, don't create new.
+3. NO exec.Command inside loop/tick for: nvidia-smi, nmcli, bluetoothctl, df, pactl list. Use direct file read / dbus. Exec only when user triggers action (e.g., user presses Enter to connect wifi).
+4. Dbus connection is singleton from system/dbus.go
+5. Monitor collectors send data via channel: type Collector struct { DataChan chan Stats }
+6. UI redraws only when new data arrives, not forced full redraw.
+
+UI SPEC:
+- Beautiful, btop-inspired, dark mode, colorful ascii, 60fps feels but 1s data refresh
+- Ram tab: show Free, Used, Cache, Available, Total with bar + sparkline
+- Disk tab: table with Mountpoint, Used/Free/Total GB, Percent bar, Mount/Unmount button for USB/SD/MTP
+- Net tab: top = realtime graph MB/s up/down with colors, bottom = iface, IP, total used, wifi list with details (nmcli style)
+- Audio tab: output sink list, input source list (built-in vs earphone mic), volume slider, mic mute toggle, bluetooth list with scan/pair, media player now playing + pause/next/prev
+
+REFACTOR WORKFLOW:
+1. Create folders exactly as tree.
+2. Create internal/system/dbus.go, sysfs.go, proc.go first.
+3. Create internal/ui/styles.go - extract ALL styles from main.go Render() into global vars.
+4. Create internal/monitor/ram.go, disk.go, net.go - move functions from main.go, keep calculation logic identical, just wrap in collector with channel.
+5. Create internal/control/... stubs with dbus implementation, keep function signatures clean.
+6. Create internal/ui/app.go + components - move View() logic, make cmd/sandsysm/main.go thin.
+7. After each file move, run go build./... to ensure no broken imports.
+8. Final binary: go build -ldflags "-s -w" -o sandsysm./cmd/sandsysm
+
+DO NOT:
+- Do not delete my calculation for GB formatting, RAM cache logic - move it as is
+- Do not add new external dependencies without asking
+- Do not create new file names outside tree
+- Do not leave any code in cmd/sandsysm/main.go except bootstrap
+
+ACCEPTANCE CRITERIA:
+- go build./... passes
+-./sandsysm runs, no GPU spike (check with nvtop/radeontop), stays <5% idle
+- All requested features have module placeholder even if TODO, so I can see where to continue
+- Styles are global, no NewStyle in Render()
+
+ATTACHED: main.go (3000 lines) - This is source of truth.
+
+Now start with STEP 1-3 only: create folders + system helpers + styles.go extraction. Show me diff.

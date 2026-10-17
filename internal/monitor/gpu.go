@@ -11,6 +11,7 @@ import (
 
 type GpuStat struct {
 	Percent float64
+	Name    string
 }
 
 func StartGpu(ctx context.Context) <-chan GpuStat {
@@ -26,6 +27,7 @@ func StartGpu(ctx context.Context) <-chan GpuStat {
 				return
 			case <-ticker.C:
 				percent := float64(0)
+				name := "GPU"
 				paths, err := filepath.Glob("/sys/class/drm/card*/device/gpu_busy_percent")
 				if err == nil {
 					for _, path := range paths {
@@ -35,13 +37,14 @@ func StartGpu(ctx context.Context) <-chan GpuStat {
 						}
 						percent, err = strconv.ParseFloat(value, 64)
 						if err == nil {
+							name = filepath.Base(filepath.Dir(filepath.Dir(path)))
 							break
 						}
 						percent = 0
 					}
 				}
 				select {
-				case ch <- GpuStat{Percent: percent}:
+				case ch <- GpuStat{Percent: percent, Name: name}:
 				case <-ctx.Done():
 					return
 				}

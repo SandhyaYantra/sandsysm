@@ -1,8 +1,8 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import "github.com/username/sandsysm/internal/ui/components"
 
 var (
-	StyleBar   = lipgloss.NewStyle()
-	StyleTitle = lipgloss.NewStyle().Bold(true)
+	StyleBar   = components.StyleBar
+	StyleTitle = components.StyleTitle
 )

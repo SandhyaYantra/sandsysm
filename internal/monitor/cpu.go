@@ -8,7 +8,8 @@ import (
 )
 
 type CpuStat struct {
-	Percent float64
+	Total   float64
+	PerCore []float64
 }
 
 func StartCpu(ctx context.Context) <-chan CpuStat {
@@ -16,7 +17,7 @@ func StartCpu(ctx context.Context) <-chan CpuStat {
 	go func() {
 		defer close(ch)
 		for {
-			percentages, err := cpu.PercentWithContext(ctx, time.Second, false)
+			corePercentages, err := cpu.PercentWithContext(ctx, time.Second, true)
 			if ctx.Err() != nil {
 				return
 			}
@@ -30,11 +31,15 @@ func StartCpu(ctx context.Context) <-chan CpuStat {
 				}
 				continue
 			}
-			if len(percentages) == 0 {
+			if len(corePercentages) == 0 {
 				continue
 			}
+			total := 0.0
+			for _, percentage := range corePercentages {
+				total += percentage
+			}
 			select {
-			case ch <- CpuStat{Percent: percentages[0]}:
+			case ch <- CpuStat{Total: total / float64(len(corePercentages)), PerCore: corePercentages}:
 			case <-ctx.Done():
 				return
 			}

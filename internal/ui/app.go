@@ -903,67 +903,61 @@ func (m Model) View() string {
 	if width < 48 {
 		width = 48
 	}
-	fullWidth := width - 2
+	fullWidth := width
 	if fullWidth < 40 {
 		fullWidth = 40
 	}
 	left60 := (fullWidth - 1) * 6 / 10
-	right40 := fullWidth - left60
+	right40 := fullWidth - left60 - 1
 	leftHalf := (fullWidth - 1) / 2
-	rightHalf := fullWidth - leftHalf
+	rightHalf := fullWidth - leftHalf - 1
 
-	rows := make([]string, 0, 5)
+	type panelBox struct {
+		title   string
+		content string
+		width   int
+		focused bool
+	}
+	type panelRow struct {
+		boxes  []panelBox
+		height int
+	}
+	rows := make([]panelRow, 0, 5)
 	if m.panels.Monitor {
-		rows = append(rows, components.Box("CPU", RenderCPUPanel(m.cpu), fullWidth, 12, m.focusedPanel == 0))
+		rows = append(rows, panelRow{height: 12, boxes: []panelBox{{"CPU", RenderCPUPanel(m.cpu), fullWidth, m.focusedPanel == 0}}})
 	}
 	if m.panels.Monitor || m.panels.Battery {
-		memoryBox, batteryBox := "", ""
+		row := panelRow{height: 9}
 		if m.panels.Monitor {
-			memoryBox = components.Box("Memory / GPU / Backlight",
-				RenderMemoryPanel(m.ram, m.gpu, m.brightness, m.brightnessMax, m.keyboardBrightness, m.keyboardMax),
-				left60, 9, m.focusedPanel == 0)
+			row.boxes = append(row.boxes, panelBox{"Memory / GPU / Backlight",
+				RenderMemoryPanel(m.ram, m.gpu, m.brightness, m.brightnessMax, m.keyboardBrightness, m.keyboardMax), left60, m.focusedPanel == 0})
 		}
 		if m.panels.Battery {
-			batteryBox = components.Box("Battery / Power",
-				RenderBatteryPanel(m.battery, m.profiles, m.activeProfile, m.profileList.Selected, m.airplaneMode),
-				right40, 9, m.focusedPanel == 4)
+			boxWidth := fullWidth
+			if m.panels.Monitor {
+				boxWidth = right40
+			}
+			row.boxes = append(row.boxes, panelBox{"Battery / Power",
+				RenderBatteryPanel(m.battery, m.profiles, m.activeProfile, m.profileList.Selected, m.airplaneMode), boxWidth, m.focusedPanel == 4})
 		}
-		if memoryBox != "" && batteryBox != "" {
-			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, memoryBox, batteryBox))
-		} else if memoryBox != "" {
-			rows = append(rows, memoryBox)
-		} else {
-			rows = append(rows, components.Box("Battery / Power",
-				RenderBatteryPanel(m.battery, m.profiles, m.activeProfile, m.profileList.Selected, m.airplaneMode),
-				fullWidth, 9, m.focusedPanel == 4))
-		}
+		rows = append(rows, row)
 	}
-	if m.panels.Disk || m.panels.Net {
-		diskBox, netBox := "", ""
-		if m.panels.Disk {
-			diskBox = components.Box("Disk / Removable", RenderDiskTab(m.disks, m.drives, m.drivesList), left60, 16, m.focusedPanel == 1)
-		}
-		if m.panels.Net {
-			netBox = components.Box("Network / Wi-Fi", RenderNetPanel(m.nets, m.aps, m.wifiList,
-				m.netRxHistory, m.netTxHistory, right40-4), right40, 16, m.focusedPanel == 2)
-		}
-		if diskBox != "" && netBox != "" {
-			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, diskBox, netBox))
-		} else if diskBox != "" {
-			rows = append(rows, components.Box("Disk / Removable", RenderDiskTab(m.disks, m.drives, m.drivesList), fullWidth, 16, m.focusedPanel == 1))
-		} else {
-			rows = append(rows, components.Box("Network / Wi-Fi", RenderNetPanel(m.nets, m.aps, m.wifiList,
-				m.netRxHistory, m.netTxHistory, fullWidth-4), fullWidth, 16, m.focusedPanel == 2))
-		}
+	if m.panels.Disk {
+		rows = append(rows, panelRow{height: 12, boxes: []panelBox{{"Disk / Removable", RenderDiskTab(m.disks, m.drives, m.drivesList), fullWidth, m.focusedPanel == 1}}})
+	}
+	if m.panels.Net {
+		rows = append(rows, panelRow{height: 12, boxes: []panelBox{{"Network / Wi-Fi", RenderNetPanel(m.nets, m.aps, m.wifiList,
+			m.netRxHistory, m.netTxHistory, fullWidth-4), fullWidth, m.focusedPanel == 2}}})
 	}
 	if m.panels.Audio {
-		audioBox := components.Box("Audio / Sources", RenderAudioPanel(m.sinks, m.sources, m.audioFocus, m.selectedSink, m.selectedSource), leftHalf, 14, m.focusedPanel == 3)
 		btContent := RenderBluetoothMediaPanel(m.btDevices, m.players, m.nowPlayingTitle, m.nowPlayingArtist, m.nowPlayingStatus, m.audioFocus == 2, m.btList)
-		btBox := components.Box("Bluetooth / Media", btContent, rightHalf, 14, m.focusedPanel == 3)
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, audioBox, btBox))
+		rows = append(rows, panelRow{height: 12, boxes: []panelBox{
+			{"Audio / Sources", RenderAudioPanel(m.sinks, m.sources, m.audioFocus, m.selectedSink, m.selectedSource), leftHalf, m.focusedPanel == 3 && m.audioFocus != 2},
+			{"Bluetooth / Media", btContent, rightHalf, m.focusedPanel == 3 && m.audioFocus == 2},
+		}})
 	}
 	if len(rows) == 0 {
-		rows = append(rows, components.Box("sandsysm", "All panels are hidden. Press 1-5 to show a panel.", fullWidth, 5, true))
+		rows = append(rows, panelRow{height: 5, boxes: []panelBox{{"sandsysm", "All panels are hidden. Press 1-5 to show a panel.", fullWidth, true}}})
 	}
 	focusNames := [...]string{"Monitor", "Disk", "Net/Wi-Fi", "Audio", "Battery/Power"}
 	focusName := "Dashboard"
@@ -981,8 +975,40 @@ func (m Model) View() string {
 	if m.status != "" {
 		footer = append(footer, fitLine("Status: "+m.status, width))
 	}
-	rows = append(rows, strings.Join(footer, "\n"))
-	content := lipgloss.JoinVertical(lipgloss.Left, header, strings.Join(rows, "\n"))
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(strings.Join(footer, "\n"))
+	separatorHeight := maxInt(len(rows)-1, 0)
+	footerGap := 1
+	availableHeight := m.windowHeight - headerHeight - footerHeight - separatorHeight - footerGap
+	baseHeight := 0
+	for _, row := range rows {
+		baseHeight += row.height
+	}
+	if availableHeight > baseHeight {
+		rows[len(rows)-1].height += availableHeight - baseHeight
+	}
+	renderedRows := make([]string, 0, len(rows)*2+1)
+	for _, row := range rows {
+		boxes := make([]string, 0, len(row.boxes))
+		for _, box := range row.boxes {
+			boxes = append(boxes, components.Box(box.title, box.content, box.width, row.height, box.focused))
+		}
+		if len(boxes) == 1 {
+			renderedRows = append(renderedRows, boxes[0])
+		} else {
+			renderedRows = append(renderedRows, lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], " ", boxes[1]))
+		}
+	}
+	contentRows := make([]string, 0, len(renderedRows)*2+2)
+	contentRows = append(contentRows, header)
+	for index, row := range renderedRows {
+		if index > 0 {
+			contentRows = append(contentRows, "")
+		}
+		contentRows = append(contentRows, row)
+	}
+	contentRows = append(contentRows, "", strings.Join(footer, "\n"))
+	content := strings.Join(contentRows, "\n")
 	lines := strings.Split(content, "\n")
 	height := m.windowHeight
 	if height <= 0 {
@@ -1003,7 +1029,11 @@ func (m Model) View() string {
 	if end > len(lines) {
 		end = len(lines)
 	}
-	return strings.Join(lines[offset:end], "\n")
+	visibleLines := lines[offset:end]
+	for len(visibleLines) < height {
+		visibleLines = append(visibleLines, "")
+	}
+	return strings.Join(visibleLines, "\n")
 }
 
 func (m Model) monitorView() string {

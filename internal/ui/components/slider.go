@@ -25,7 +25,7 @@ func RenderSlider(cur, max int, label string) string {
 	if filledCount > 10 {
 		filledCount = 10
 	}
-	bar := fmt.Sprintf("[%s%s] %d/%d", strings.Repeat("█", filledCount), strings.Repeat("░", 10-filledCount), cur, max)
+	bar := fmt.Sprintf("[%s%s] %3d/%3d", strings.Repeat("█", filledCount), strings.Repeat("░", 10-filledCount), cur, max)
 	color := lipgloss.Color("#53d769")
 	if percent >= 80 {
 		color = lipgloss.Color("#ff5d5d")

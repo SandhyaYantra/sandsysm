@@ -27,7 +27,7 @@ func RenderBar(used, total uint64, percent float64) string {
 	empty := strings.Repeat("░", 10-filledCount)
 	usedGB := float64(used) / (1024 * 1024 * 1024)
 	totalGB := float64(total) / (1024 * 1024 * 1024)
-	bar := fmt.Sprintf("[%s%s] %.1f GB / %.1f GB (%.0f%%)", filled, empty, usedGB, totalGB, percent)
+	bar := fmt.Sprintf("[%s%s] %.1f GB / %.1f GB (%3.0f%%)", filled, empty, usedGB, totalGB, percent)
 
 	color := lipgloss.Color("#53d769")
 	if percent >= 80 {
@@ -49,7 +49,7 @@ func RenderGauge(label string, percent float64) string {
 	if filledCount > 10 {
 		filledCount = 10
 	}
-	bar := fmt.Sprintf("[%s%s] %.0f%%", strings.Repeat("█", filledCount), strings.Repeat("░", 10-filledCount), percent)
+	bar := fmt.Sprintf("[%s%s] %3.0f%%", strings.Repeat("█", filledCount), strings.Repeat("░", 10-filledCount), percent)
 	color := lipgloss.Color("#53d769")
 	if percent >= 80 {
 		color = lipgloss.Color("#ff5d5d")
